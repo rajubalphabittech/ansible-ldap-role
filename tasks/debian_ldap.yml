@@ -34,7 +34,7 @@
   become: true
   lineinfile:
     dest: /etc/environment
-    line: "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{ ldap_path }}"
+    line: "PATH=/usr/local/bin:/usr/bin:/bin:{{ ldap_path }}"
   tags:
     - path
 
