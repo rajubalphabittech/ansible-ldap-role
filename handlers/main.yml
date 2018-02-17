@@ -1,0 +1,6 @@
+---
+- name: restart sldap instance
+  become: yes
+  service:
+    name: "slapd-{{ slapd_instance }}"
+    state: restarted

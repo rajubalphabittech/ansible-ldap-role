@@ -1,0 +1,15 @@
+---
+# Default variables for the Ldap
+
+ldap_user: ldap
+ldap_group: ldap
+ldap_port: 389
+ldaps_port: 636
+ldap_path: '/usr/local/openldap/sbin:/usr/local/openldap/bin'
+
+slapd_instance: client1
+service_url: ldap-client1.xip.io
+tls_enabled: true
+slapd_instance_dir: "{{ proj_path }}/{{ slapd_instance }}"
+ssl_cert_dir: "{{ slapd_instance_dir }}/etc/ssl"
+reader_ldif: "{{ slapd_instance_dir }}/etc/reader.ldif"

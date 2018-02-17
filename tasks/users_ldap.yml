@@ -1,0 +1,35 @@
+---
+- name: copy reader ldif file
+  become: true
+  template:
+    src: "{{ role_path }}/templates/reader.ldif"
+    dest: "{{ reader_ldif }}"
+    owner: "{{ ldap_user }}"
+    group: "{{ ldap_group }}"
+    mode: 0644
+
+- name: create reader entry
+  become: true
+  shell: "echo -n 'userPassword: ' >> {{ reader_ldif }} \
+          && /usr/local/openldap/sbin/slappasswd -h {SSHA} -s {{ reader_psw }} >> {{ reader_ldif }} \
+          && touch {{ slapd_instance_dir }}/.reader_entry_ok"
+  args:
+    executable: /bin/bash
+    creates: "{{ slapd_instance_dir }}/.reader_entry_ok"
+
+- name: insert reader entry
+  become: true
+  shell: "LDAPTLS_REQCERT=never /usr/local/openldap/bin/ldapadd \
+          -Z -H ldap://127.0.0.1:{{ ldap_port }} \
+          -D cn=manager,{{ suffix }} -w {{ manager_psw }} \
+          -f {{ reader_ldif }} \
+          && touch {{ slapd_instance_dir }}/.reader_inserted_ok"
+  args:
+    executable: /bin/bash
+    creates: "{{ slapd_instance_dir }}/.reader_inserted_ok"
+  notify: restart sldap instance
+
+- debug:
+    msg: "Test like this:
+    LDAPTLS_REQCERT=never /usr/local/openldap/bin/ldapsearch -H ldap://127.0.0.1
+    -D cn=reader,dc=client1,dc=it -w 'ChangeM3T00!' -b cn=reader,dc=client1,dc=it -Z"

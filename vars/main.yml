@@ -1,0 +1,13 @@
+---
+# LDAP instance vars file
+
+suffix: 'dc=client1,dc=it'
+organization: 'Client 1 blablabla'
+domain: client1
+manager_psw: 'xxx'
+reader_psw: 'yyy'
+
+acl_file: ''
+syncrepl_file: ''
+mirror: '' # put here mirror address (if needed)
+#mirror: '192.168.20.1'

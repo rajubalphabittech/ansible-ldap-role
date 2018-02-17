@@ -1,0 +1,6 @@
+dn: {{ suffix }}
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+o: {{ organization }}
+dc: {{ domain }}

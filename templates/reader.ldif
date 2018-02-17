@@ -1,0 +1,6 @@
+# reader,{{ suffix }}
+dn: cn=reader,{{ suffix }}
+cn: reader
+objectClass: person
+objectClass: top
+sn: reader

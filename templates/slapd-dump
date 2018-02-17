@@ -1,0 +1,19 @@
+#!/bin/bash
+FS_CLIENT="{{ proj_path }}"
+
+for instance in $(/usr/bin/find  $FS_CLIENT -maxdepth 1 -mindepth 1 -type d | grep -v lost | grep -v etc | awk -F/ '{print $NF}' | sort)
+do
+# Check the existence of "slapd.conf" to determine if we are looking a proper instance.
+if [ -f $FS_CLIENT/$instance/etc/slapd.conf ]
+    then
+
+#Execute the actual command
+#Dump db 0 ("cn=config")
+for db in 0 1 ; do
+    /usr/local/openldap/sbin/slapcat -f $FS_CLIENT/$instance/etc/slapd.conf -n $db \
+    | tee  >(egrep -v "^(contextCSN|entryCSN|entryUUID|modifyTimestamp|createTimestamp):\ " | sort | md5sum > $FS_CLIENT/$instance/var/data/slapd-$db.checksum ) \
+    | bzip2 > $FS_CLIENT/$instance/var/data/slapd-$db.ldif.bz2
+
+    done
+fi
+done

@@ -1,0 +1,6 @@
+---
+- include: debian_ldap.yml
+  when: ansible_os_family == "Debian"
+
+- include: redhat_ldap.yml
+  when: ansible_os_family == "RedHat"

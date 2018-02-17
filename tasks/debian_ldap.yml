@@ -1,0 +1,152 @@
+---
+- name: add an apt signing key
+  become: true
+  apt_key:
+    url: https://ltb-project.org/wiki/lib/RPM-GPG-KEY-LTB-project
+    state: present
+
+- name: add LTB-project repository into sources list using specified filename
+  become: true
+  apt_repository:
+    repo: deb [arch=amd64] https://ltb-project.org/debian/stretch stretch main
+    state: present
+    filename: 'ltb-project'
+
+- name: install and openldap-ltb packages
+  become: true
+  apt: pkg={{ item }} state=present update_cache=yes cache_valid_time=3600
+  with_items:
+   - 'openldap-ltb'
+   - 'openldap-ltb-check-password'
+   - libtcmalloc-minimal4
+   - libnet-ldap-perl
+
+- name: disable default slapd
+  become: true
+  service:
+    name: slapd
+    state: stopped
+    enabled: no
+
+- name: add openldap to path
+  # SUDO CAVEAT: sudo has a default policy of resetting the Environment and setting a secure path
+  # As a workaround, you can use "sudo su" that will provide a shell with root privileges but retaining any modified PATH variables
+  become: true
+  lineinfile:
+    dest: /etc/environment
+    line: "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{{ ldap_path }}"
+  tags:
+    - path
+
+- name: configure directories
+  become: true
+  file:
+    path: "{{ item }}"
+    state: directory
+  with_items:
+    - "{{ proj_path }}/etc"
+    - "{{ proj_path }}/etc/schema"
+    - "{{ slapd_instance_dir }}"
+
+- name: add default schemas
+  become: true
+  with_fileglob:
+    - '{{ role_path }}/files/schema/*.schema'
+  copy:
+    src: '{{ item }}'
+    dest: "{{ proj_path }}/etc/schema/{{ item|basename }}"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: configure ldap instance dirs
+  become: true
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ldap_user }}"
+    group: "{{ ldap_group }}"
+  with_items:
+    - "{{ slapd_instance_dir }}/etc"
+    - "{{ slapd_instance_dir }}/etc/ssl"
+    - "{{ slapd_instance_dir }}/var"
+    - "{{ slapd_instance_dir }}/var/data"
+    - "{{ slapd_instance_dir }}/var/run"
+
+- name: create tls certificates
+  become: true
+  shell:
+    "openssl req -new -x509 -nodes -out {{ service_url }}.crt \
+    -keyout {{ service_url }}.key -subj '/CN={{ service_url }}' -days 3650; \
+    chown {{ ldap_user }}:{{ ldap_group }} *"
+  args:
+    chdir: "{{ ssl_cert_dir }}"
+    creates: "{{ ssl_cert_dir }}/{{ service_url }}.crt"
+  when: tls_enabled
+
+- name: configure ldap instance files
+  become: true
+  template:
+    src: "{{ role_path }}/templates/{{ item }}"
+    dest: "{{ slapd_instance_dir }}/etc/{{ item }}"
+    owner: "{{ ldap_user }}"
+    group: "{{ ldap_group }}"
+    mode: 0644
+  with_items:
+    - startup.ldif
+    - slapd.conf
+    - slapdlocal.conf
+  notify: restart sldap instance
+
+- name: slapd instance service
+  become: true
+  template:
+    src: "{{ role_path }}/templates/slapd-init"
+    dest: "/etc/init.d/slapd-{{ slapd_instance }}"
+    owner: root
+    group: root
+    mode: 0755
+  notify: restart sldap instance
+
+- name: enable slapd instance service
+  become: true
+  service:
+    name: "slapd-{{ slapd_instance }}"
+    state: started
+    enabled: yes
+
+- name: create base entry
+  become: true
+  shell: "LDAPTLS_REQCERT=never /usr/local/openldap/bin/ldapadd \
+          -Z -H ldap://127.0.0.1:{{ ldap_port }} \
+          -D cn=manager,{{ suffix }} -w {{ manager_psw }} \
+          -f {{ slapd_instance_dir }}/etc/startup.ldif; \
+          LDAPTLS_REQCERT=never /usr/local/openldap/bin/ldapsearch \
+          -s base -Z -H ldap://127.0.0.1:{{ ldap_port }} \
+          -D cn=manager,{{ suffix }} -w {{ manager_psw }} \
+          -b {{ suffix }}; \
+          touch {{ slapd_instance_dir }}/.base_entry_ok"
+  args:
+    executable: /bin/bash
+    creates: "{{ slapd_instance_dir }}/.base_entry_ok"
+  notify: restart sldap instance
+
+- name: copy slapd dump script
+  become: true
+  template:
+    src: "{{ role_path }}/templates/slapd-dump"
+    dest: "/usr/local/bin/slapd-dump"
+    mode: 0744
+
+- name: crontab backup ldap instances
+  become: true
+  cron:
+    name: "backup ldap instances"
+    minute: "00"
+    hour: "4"
+    job: "/usr/local/bin/slapd-dump &> /dev/null"
+
+- name: manage default ldap users
+  include: users_ldap.yml
+
+- meta: flush_handlers
